@@ -4,14 +4,14 @@
 
 Domotica controller;
 //NRF905 nrf;
-char testmsg[MSG_LEN] = {"abcdefghijklmnopqrstuvwxyz1"};
+char testmsg[MSG_LEN] = {"switch10000000000000000000"};
 long sent = 0;
 long received = 0;
 
 void setup() {
   Serial.begin(9600);
   //nrf = NRF905();
-  controller = Domotica();
+  controller = Domotica();u
   controller.setDebug(true);
   controller.init(0);  
   
