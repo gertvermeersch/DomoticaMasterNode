@@ -4,7 +4,7 @@
 
 Domotica controller;
 //NRF905 nrf;
-char testmsg[MSG_LEN] = {"012345678901234567890123456"};
+char testmsg[MSG_LEN] = {"abcdefghijklmnopqrstuvwxyz1"};
 long sent = 0;
 long received = 0;
 
