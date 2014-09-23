@@ -11,7 +11,7 @@ long received = 0;
 void setup() {
   Serial.begin(9600);
   //nrf = NRF905();
-  controller = Domotica();u
+  controller = Domotica();
   controller.setDebug(true);
   controller.init(0);  
   
