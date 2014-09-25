@@ -13,8 +13,8 @@ void setup() {
   //nrf = NRF905();
   controller = Domotica();
   controller.setDebug(true);
-  controller.init(0);  
-  
+  controller.init(0); 
+  delay(200);
   
 }
 
