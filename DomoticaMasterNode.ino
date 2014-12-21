@@ -22,6 +22,7 @@ char response[32];
 bool state0 = false;
 bool state1 = false;
 bool state2 = false;
+bool stateRelay = false;
 
 
 void receivedMessage() {
@@ -29,13 +30,15 @@ void receivedMessage() {
  Serial.println("interrupt!");
  ptrbuffer = controller.getMsg();
  for(int i = 0; i<32;i++) {
-   Serial.print(ptrbuffer[i],DEC);
+   Serial.print(ptrbuffer[i]);
  }
  received++; 
 }
 
 void setup() {
   Serial.begin(115200); //max baud rate
+  pinMode(A0,OUTPUT);
+  digitalWrite(A0,LOW);
   //nrf = NRF905();
   controller = Domotica();
   controller.setDebug(true);
@@ -66,77 +69,128 @@ void loop() {
 
 void parseSerialBuffer() {
   Serial.println("Parsing message");
-  if(serialBuffer[4] == 'R' && serialBuffer[5] == 'E' && serialBuffer[6] == 'Q' && serialBuffer[7] == 'T') {
-  //Request is following
-    if(serialBuffer[0] == '0' && serialBuffer[1] == '0' && serialBuffer[2] == '0' && serialBuffer[3] == '0') {
+  
+    
+  if(serialBuffer[0] == '0' && serialBuffer[1] == '0' && serialBuffer[2] == '0' && serialBuffer[3] == '0') {
     //Request is for the RF433Mhz switches, so local
+    if(serialBuffer[4] == 'R' && serialBuffer[5] == 'E' && serialBuffer[6] == 'Q' && serialBuffer[7] == 'T') {
+    //Request is following
+      
+          if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'S' && serialBuffer[11] == 'T') {
+            //switch state requested
+            String responseStr = "0000STATSWST";
+            responseStr.toCharArray(response,32);
+            //now we add "<switchnr><state>"
+            response[12] = serialBuffer[12]; //copy the switch number
+            if(serialBuffer[12] == '1') {
+  
+              response[13] = state0?'1':'0';
+              
+            }
+            else if(serialBuffer[12] == '2') {
+              response[13] = state1?'1':'0';
+            }
+            else if(serialBuffer[12] == '3') {
+              response[13] = state2?'1':'0';
+            }
+            response[14] = '\0';
+            
+            Serial.println(response);
+            
+          }
+      }
+    //command
+    if(serialBuffer[4] == 'C' && serialBuffer[5] == 'O' && serialBuffer[6] == 'M' && serialBuffer[7] == 'D') {
+  //command is following
+     Serial.println("destination address is RF433 Mhz receivers");
+      Serial.println("Command is following");
+        if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'N') {
+        //switch on command
+         Serial.println("Switch on command");
+          if(serialBuffer[12] == '1') {
+            transmitter.sendUnit(0,true);
+            state0 = true;
+          }
+          else if(serialBuffer[12] == '2') {
+            transmitter.sendUnit(1,true);
+            state1 = true;
+          }
+          else if(serialBuffer[12] == '3') {
+            transmitter.sendUnit(2,true);
+            state2 = true;
+            }
+        }
+        else if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'F') {
+          //switch off command
+          Serial.println("Switch off command");
+          if(serialBuffer[12] == '1') {
+            transmitter.sendUnit(0,false);
+            state0 = false;
+          }
+          else if(serialBuffer[12] == '2') {
+            transmitter.sendUnit(1,false);
+            state1 = false;
+            }
+          else if(serialBuffer[12]== '3') {
+            transmitter.sendUnit(2,false);
+            state2 = false;
+            }
+            
+        }
+  
+    }
+    }
+    
+    else if(serialBuffer[0] == 0x66 && serialBuffer[1] == 0x66 && serialBuffer[2] == 0x66 && serialBuffer[3] == 0x66) {
+    //Request is for the local relay
         if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'S' && serialBuffer[11] == 'T') {
           //switch state requested
-          String responseStr = "0000STATSWST";
+          String responseStr = "ffffSTATSWST";
           responseStr.toCharArray(response,32);
           //now we add "<switchnr><state>"
           response[12] = serialBuffer[12]; //copy the switch number
           if(serialBuffer[12] == '1') {
-
-            response[13] = state0?'1':'0';
-            
-          }
-          else if(serialBuffer[12] == '2') {
-            response[13] = state1?'1':'0';
-          }
-          else if(serialBuffer[12] == '3') {
-            response[13] = state2?'1':'0';
+            response[13] = state0?'1':'0'; 
           }
           response[14] = '\0';
           
           Serial.println(response);
           
         }
-    }
-  
-  }
-    
-  if(serialBuffer[4] == 'C' && serialBuffer[5] == 'O' && serialBuffer[6] == 'M' && serialBuffer[7] == 'D') {
+        if(serialBuffer[4] == 'C' && serialBuffer[5] == 'O' && serialBuffer[6] == 'M' && serialBuffer[7] == 'D') {
   //command is following
-    if(serialBuffer[0] == '0' && serialBuffer[1] == '0' && serialBuffer[2] == '0' && serialBuffer[3] == '0') {
-    //destination address is RF433 Mhz receivers
-    Serial.println("destination address is RF433 Mhz receivers");
-    Serial.println("Command is following");
+   
+      //command is for this controller itself
       if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'N') {
       //switch on command
        Serial.println("Switch on command");
         if(serialBuffer[12] == '1') {
-          transmitter.sendUnit(0,true);
-          state0 = true;
+          digitalWrite(A0,HIGH);
+          stateRelay = true;
         }
-        else if(serialBuffer[12] == '2') {
-          transmitter.sendUnit(1,true);
-          state1 = true;
-        }
-        else if(serialBuffer[12] == '3') {
-          transmitter.sendUnit(2,true);
-          state2 = true;
-          }
+       
       }
       else if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'F') {
         //switch off command
         Serial.println("Switch off command");
         if(serialBuffer[12] == '1') {
-          transmitter.sendUnit(0,false);
-          state0 = false;
-        }
-        else if(serialBuffer[12] == '2') {
-          transmitter.sendUnit(1,false);
-          state1 = false;
-          }
-        else if(serialBuffer[12]== '3') {
-          transmitter.sendUnit(2,false);
-          state2 = false;
-          }
-          
+          digitalWrite(A0,LOW);
+          stateRelay = false;
+        } 
       }
-    }
+     }
+ 
   }
+  
+  else {
+    //the message has to be forwarded using the NRF905 chip
+    controller.sendToNode(serialBuffer, serialBuffer+4);
+  }
+    
+  
+  
+    
+  
 }
 
 
