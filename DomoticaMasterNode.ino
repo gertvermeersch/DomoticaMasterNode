@@ -12,6 +12,8 @@
  */
  
 NewRemoteTransmitter transmitter(12376190, 6, 260, 3);
+NewRemoteTransmitter transmitter2(16232974, 6, 260, 3);
+
 Domotica controller;
 //NRF905 nrf;
 char testmsg[MSG_LEN];
@@ -22,53 +24,101 @@ char response[32];
 bool state0 = false;
 bool state1 = false;
 bool state2 = false;
+bool state3 = false;
+bool state4 = false;
+bool state5 = false;
 bool stateRelay = false;
+boolean green;
+
+/* turn debug on  */
+bool debug = false;
 
 
 void receivedMessage() {
  char* ptrbuffer;
- Serial.println("interrupt!");
+ if(debug)Serial.println("interrupt!");
  ptrbuffer = controller.getMsg();
  for(int i = 0; i<32;i++) {
    Serial.print(ptrbuffer[i]);
  }
+ Serial.print('\r');
  received++; 
 }
 
 void setup() {
+  pinMode(A1, OUTPUT);
+  pinMode(A2, OUTPUT);
   Serial.begin(115200); //max baud rate
   pinMode(A0,OUTPUT);
   digitalWrite(A0,LOW);
   //nrf = NRF905();
   controller = Domotica();
-  controller.setDebug(true);
+  controller.setDebug(debug);
   controller.init(0); 
-  attachInterrupt(0,receivedMessage,RISING);
+  attachInterrupt(1,receivedMessage,RISING);
   transmitter.sendUnit(0,false);
   transmitter.sendUnit(1,false);
   transmitter.sendUnit(2,false);
+  transmitter2.sendUnit(0,false);
+  transmitter2.sendUnit(1,false);
+  transmitter2.sendUnit(2,false);
+  
+  //set timer1 interrupt at 1Hz
+  TCCR1A = 0;// set entire TCCR1A register to 0
+  TCCR1B = 0;// same for TCCR1B
+  TCNT1  = 0;//initialize counter value to 0
+  // set compare match register for 1hz increments
+  OCR1A = 31249;// 2 second interval = MINIMUM for the temperature sensor // 1 sec interval for reading, can't read in interrupt because of use of delay == bad
+  // turn on CTC mode
+  TCCR1B |= (1 << WGM12);
+  // Set CS12 and CS10 bits for 1024 prescaler
+  TCCR1B |= (1 << CS12) | (1 << CS10);  
+  // enable timer compare interrupt
+  TIMSK1 |= (1 << OCIE1A);
+  sei();
+}
+
+ISR(TIMER1_COMPA_vect) {
+  green = !green;
+   
+   digitalWrite(A1, green);
+   digitalWrite(A2, !green);
 }
 
 void loop() {
   while(!Serial.available()); //wait until a message is sent
   int i = 0;
+  char temp;
   delay(1);
-  Serial.println("receiving");
-  while(Serial.available() > 0 && i < 32) {
-      serialBuffer[i] = Serial.read();
-      //Serial.print(Serial.available(), HEX);
-      if(serialBuffer[i] == '\n' || serialBuffer[i] == '\r') {
-        serialBuffer[i] = '\0';
-        break;
+  //Serial.println("receiving");
+  while(i < 32) {
+      temp = Serial.read();
+      if( (temp >= 'a' && temp <= 'z') or (temp >= '0' && temp <= '9') or (temp >= 'A' && temp <= 'Z') or temp == '\r')  { //alphanumerical char caps only
+        serialBuffer[i++] = temp;
+        if(temp == '\r')
+          i = 32; //stop reading when \r is read
       }
-      i++;
+      //Serial.print(i);
+      //wait for next character, this is a more solid solution!
+      while(Serial.available() == 0 && i < 32);
   }
-  //Serial.println(serialBuffer);
+  while(Serial.read() != -1); //flush buffer
+  if(debug)Serial.print("I got: ");
+  if(debug)Serial.println(serialBuffer);
+  if(debug)Serial.print("The buffer now contains: ");
+  for(int i = 0; i<32; i++) {
+    if(debug)Serial.print(serialBuffer[i], HEX);
+    if(debug)Serial.print(" ");  
+  }
+  if(debug)Serial.println("");
   parseSerialBuffer();
+  delay(50); //allow some time to let the other end parse the message
 }
 
 void parseSerialBuffer() {
-  Serial.println("Parsing message");
+  //yellow light on
+  digitalWrite(A2, true);
+  if(debug)Serial.println("Parsing message");
   
     
   if(serialBuffer[0] == '0' && serialBuffer[1] == '0' && serialBuffer[2] == '0' && serialBuffer[3] == '0') {
@@ -82,18 +132,29 @@ void parseSerialBuffer() {
             responseStr.toCharArray(response,32);
             //now we add "<switchnr><state>"
             response[12] = serialBuffer[12]; //copy the switch number
-            if(serialBuffer[12] == '1') {
+            if(serialBuffer[12] == '0') {
   
               response[13] = state0?'1':'0';
               
             }
-            else if(serialBuffer[12] == '2') {
+            else if(serialBuffer[12] == '1') {
               response[13] = state1?'1':'0';
             }
-            else if(serialBuffer[12] == '3') {
+            else if(serialBuffer[12] == '2') {
               response[13] = state2?'1':'0';
             }
-            response[14] = '\0';
+            if(serialBuffer[12] == '3') {
+  
+              response[13] = state3?'1':'0';
+              
+            }
+            else if(serialBuffer[12] == '4') {
+              response[13] = state4?'1':'0';
+            }
+            else if(serialBuffer[12] == '5') {
+              response[13] = state5?'1':'0';
+            }
+            response[14] = '\r';
             
             Serial.println(response);
             
@@ -102,39 +163,63 @@ void parseSerialBuffer() {
     //command
     if(serialBuffer[4] == 'C' && serialBuffer[5] == 'O' && serialBuffer[6] == 'M' && serialBuffer[7] == 'D') {
   //command is following
-     Serial.println("destination address is RF433 Mhz receivers");
-      Serial.println("Command is following");
+     if(debug)Serial.println("destination address is RF433 Mhz receivers");
+      if(debug)Serial.println("Command is following");
         if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'N') {
         //switch on command
-         Serial.println("Switch on command");
-          if(serialBuffer[12] == '1') {
+         if(debug)Serial.println("Switch on command");
+          if(serialBuffer[12] == '0') {
             transmitter.sendUnit(0,true);
             state0 = true;
           }
-          else if(serialBuffer[12] == '2') {
+          else if(serialBuffer[12] == '1') {
             transmitter.sendUnit(1,true);
             state1 = true;
           }
-          else if(serialBuffer[12] == '3') {
+          else if(serialBuffer[12] == '2') {
             transmitter.sendUnit(2,true);
             state2 = true;
-            }
+          }
+          else if(serialBuffer[12] == '3') {
+            transmitter2.sendUnit(0,true);
+            state3 = true;
+          }
+          else if(serialBuffer[12] == '4') {
+            transmitter2.sendUnit(1,true);
+            state4 = true;
+          }
+          else if(serialBuffer[12] == '5') {
+            transmitter2.sendUnit(2,true);
+            state5 = true;
+          }
         }
         else if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'F') {
           //switch off command
-          Serial.println("Switch off command");
-          if(serialBuffer[12] == '1') {
+          if(debug)Serial.println("Switch off command");
+          if(serialBuffer[12] == '0') {
             transmitter.sendUnit(0,false);
             state0 = false;
           }
-          else if(serialBuffer[12] == '2') {
+          else if(serialBuffer[12] == '1') {
             transmitter.sendUnit(1,false);
             state1 = false;
-            }
-          else if(serialBuffer[12]== '3') {
+          }
+          else if(serialBuffer[12]== '2') {
             transmitter.sendUnit(2,false);
             state2 = false;
-            }
+          }
+          if(serialBuffer[12] == '3') {
+            transmitter2.sendUnit(0,false);
+            state3 = false;
+          }
+          else if(serialBuffer[12] == '4') {
+            transmitter2.sendUnit(1,false);
+            state4 = false;
+          }
+          else if(serialBuffer[12]== '5') {
+            transmitter2.sendUnit(2,false);
+            state5 = false;
+          }
             
         }
   
@@ -152,7 +237,7 @@ void parseSerialBuffer() {
           if(serialBuffer[12] == '1') {
             response[13] = state0?'1':'0'; 
           }
-          response[14] = '\0';
+          response[14] = '\r';
           
           Serial.println(response);
           
@@ -163,7 +248,7 @@ void parseSerialBuffer() {
       //command is for this controller itself
       if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'N') {
       //switch on command
-       Serial.println("Switch on command");
+       if(debug)Serial.println("Switch on command");
         if(serialBuffer[12] == '1') {
           digitalWrite(A0,HIGH);
           stateRelay = true;
@@ -172,7 +257,7 @@ void parseSerialBuffer() {
       }
       else if(serialBuffer[8] == 'S' && serialBuffer[9] == 'W' && serialBuffer[10] == 'O' && serialBuffer[11] == 'F') {
         //switch off command
-        Serial.println("Switch off command");
+        if(debug)Serial.println("Switch off command");
         if(serialBuffer[12] == '1') {
           digitalWrite(A0,LOW);
           stateRelay = false;
@@ -184,10 +269,11 @@ void parseSerialBuffer() {
   
   else {
     //the message has to be forwarded using the NRF905 chip
-    controller.sendToNode(serialBuffer, serialBuffer+4);
+    controller.sendToAddress(serialBuffer, serialBuffer+4);
   }
     
-  
+  //yellow light off
+  digitalWrite(A2, false);
   
     
   
