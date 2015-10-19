@@ -2,6 +2,7 @@
 #include <domotica.h>
 #include <SPI.h>
 #include <NewRemoteTransmitter.h>
+#include <avr/wdt.h>
 
 /* Main program for the Master node.
  * Receives commands over Serial in the following order:
@@ -56,12 +57,12 @@ void setup() {
   controller.setDebug(debug);
   controller.init(0); 
   attachInterrupt(1,receivedMessage,RISING);
-  transmitter.sendUnit(0,false);
+  /*transmitter.sendUnit(0,false);
   transmitter.sendUnit(1,false);
   transmitter.sendUnit(2,false);
   transmitter2.sendUnit(0,false);
   transmitter2.sendUnit(1,false);
-  transmitter2.sendUnit(2,false);
+  transmitter2.sendUnit(2,false);*/
   
   //set timer1 interrupt at 1Hz
   TCCR1A = 0;// set entire TCCR1A register to 0
@@ -76,13 +77,15 @@ void setup() {
   // enable timer compare interrupt
   TIMSK1 |= (1 << OCIE1A);
   sei();
+  
+  wdt_enable(WDTO_4S);
 }
 
 ISR(TIMER1_COMPA_vect) {
   green = !green;
-   
+    wdt_reset();
    digitalWrite(A1, green);
-   digitalWrite(A2, !green);
+   //digitalWrite(A2, !green);
 }
 
 void loop() {
@@ -93,10 +96,10 @@ void loop() {
   //Serial.println("receiving");
   while(i < 32) {
       temp = Serial.read();
-      if( (temp >= 'a' && temp <= 'z') or (temp >= '0' && temp <= '9') or (temp >= 'A' && temp <= 'Z') or temp == '\r')  { //alphanumerical char caps only
+      if( (temp >= 'a' && temp <= 'z') or (temp >= '0' && temp <= '9') or (temp >= 'A' && temp <= 'Z') or temp == '\r' or temp == '.')  { //alphanumerical char caps only
         serialBuffer[i++] = temp;
-        if(temp == '\r')
-          i = 32; //stop reading when \r is read
+        if(temp == '\r' || temp == ';')
+          i = 32; //stop reading when \r is read, or ; as alternative
       }
       //Serial.print(i);
       //wait for next character, this is a more solid solution!
@@ -113,6 +116,7 @@ void loop() {
   if(debug)Serial.println("");
   parseSerialBuffer();
   delay(50); //allow some time to let the other end parse the message
+ 
 }
 
 void parseSerialBuffer() {
